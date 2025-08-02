@@ -248,27 +248,28 @@ def collect_data(years, circuit_name="São Paulo"):
         
     return df
 
-def preprocess_data(df, compound_encoder):
+def preprocess_data(df):
     """
-    Preprocess the data for training
+    Basic preprocessing for the model
     """
-    print(f"Data before outlier removal: {len(df)} laps")
+    print(f"Data before preprocessing: {len(df)} laps")
     
-    # Remove statistical outliers (2.5 standard deviations for cleaner data)
-    df = df.groupby(['compound', 'tire_age']).apply(
-        lambda x: x[np.abs(x['lap_time'] - x['lap_time'].mean()) <= 2.5 * x['lap_time'].std()]
-    ).reset_index(drop=True)
+    # Remove basic outliers (very conservative)
+    def remove_outliers(group):
+        mean_time = group['lap_time'].mean()
+        std_time = group['lap_time'].std()
+        # Keep data within 3 standard deviations (very conservative)
+        mask = np.abs(group['lap_time'] - mean_time) <= 3 * std_time
+        return group[mask]
     
-    print(f"Data after statistical outlier removal: {len(df)} laps")
+    # Group by compound and tire age for outlier removal
+    df = df.groupby(['compound', 'tire_age']).apply(remove_outliers).reset_index(drop=True)
     
-    # Encode compound as categorical
-    df['compound_encoded'] = compound_encoder.fit_transform(df['compound'])
+    print(f"Data after outlier removal: {len(df)} laps")
+    print()  # Add spacing
     
-    # Create feature matrix with essential features only
-    feature_cols = [
-        'compound_encoded', 'tire_age', 'track_temp', 'fuel_load', 'car_tier'
-    ]
-    
+    # Create feature matrix
+    feature_cols = ['track_temp', 'fuel_load', 'car_tier', 'compound', 'tire_age']
     X = df[feature_cols].copy()
     y = df['lap_time'].copy()
     

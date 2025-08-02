@@ -4,6 +4,7 @@
 cache/
 
 # Plot directories (keep only Silverstone)
+extra/
 plots/
 !plots/Silverstone/
 !plots/Silverstone/**

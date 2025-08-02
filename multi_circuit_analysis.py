@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import our modules
-from model import F1TireDegradationModel
+from tire_model import F1TireModel
 from data_collection import collect_data, preprocess_data
 from plotting import (plot_feature_importance, plot_race_stint_simulation, 
                      plot_degradation_curves, plot_fuel_load_effect)
@@ -31,7 +31,7 @@ def analyze_circuit(circuit, years):
     print(f"{'='*60}")
     
     # Initialize model
-    model = F1TireDegradationModel()
+    model = F1TireModel()
     
     # Collect data
     print("Starting data collection...")
@@ -43,7 +43,7 @@ def analyze_circuit(circuit, years):
     if len(df) > 0:
         # Preprocess data
         print("\nPreprocessing data...")
-        X, y, processed_df = preprocess_data(df, model.compound_encoder)
+        X, y, processed_df = preprocess_data(df)
         
         # Calculate mid-range temperature from actual data
         temp_min = processed_df['track_temp'].min()
@@ -58,12 +58,12 @@ def analyze_circuit(circuit, years):
         # Generate all plots (automatically saved)
         print("Generating and saving plots...")
         plot_feature_importance(model.model, model.feature_names, circuit_name=circuit)
-        plot_degradation_curves(model.model, model.compound_encoder, circuit_name=circuit, 
-                               track_temp=mid_temp, fuel_load=50)
-        plot_fuel_load_effect(model.model, model.compound_encoder, circuit_name=circuit,
-                             track_temp=mid_temp, car_tier=1)
-        plot_race_stint_simulation(model.model, model.compound_encoder, circuit, 
-                                 track_temp=mid_temp, car_tier=1, stint_length=25)
+        plot_degradation_curves(model, model.compound_encoder, circuit_name=circuit, 
+                               track_temp=mid_temp)
+        plot_fuel_load_effect(model, model.compound_encoder, circuit_name=circuit,
+                             track_temp=mid_temp)
+        plot_race_stint_simulation(model, model.compound_encoder, circuit, 
+                                 track_temp=mid_temp)
         
         print(f"✅ Analysis complete for {circuit}!")
         return True
@@ -119,7 +119,6 @@ def main():
             print(f"   - {circuit}")
     
     print(f"\nAll plots saved to individual circuit folders in the 'plots/' directory!")
-    print("You can now compare tire degradation patterns across different tracks.")
 
 if __name__ == "__main__":
     main()

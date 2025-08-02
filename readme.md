@@ -5,6 +5,7 @@ A machine learning model that predicts F1 lap times based on tire degradation, f
 ## Key Features
 
 - **Real F1 Data**: Uses FastF1 library to access official Formula 1 timing data
+- **Synthetic Cliff Effects**: Intelligently adds synthetic data only where real data is sparse to ensure realistic tire degradation patterns
 - **Circuit-Specific Modeling**: Accounts for unique fuel consumption rates across 25+ F1 circuits
 - **Car Performance Tiers**: Models performance differences between top, midfield, and bottom teams
 - **Realistic Race Simulation**: Shows tire degradation vs fuel burn-off effects during race stints
@@ -16,7 +17,7 @@ A machine learning model that predicts F1 lap times based on tire degradation, f
 | File | Purpose |
 |------|---------|
 | `main.py` | Main execution script - configure circuit and years here |
-| `model.py` | XGBoost model implementation with training and prediction methods |
+| `model.py` | XGBoost model with 5-feature architecture and synthetic data generation |
 | `data_collection.py` | F1 data gathering, circuit info, and preprocessing functions |
 | `plotting.py` | All visualization functions with auto-save capabilities |
 | `multi_circuit_analysis.py` | Batch analysis script for multiple circuits |
@@ -54,10 +55,10 @@ python multi_circuit_analysis.py  # Analyze 5 circuits automatically
 ## Results: Silverstone Analysis
 
 ### Model Performance
-- **Training MAE**: 0.386 seconds
-- **Test MAE**: 0.508 seconds  
-- **Training R²**: 0.973
-- **Test R²**: 0.944
+- **Training MAE**: 0.322 seconds
+- **Test MAE**: 0.498 seconds  
+- **Training R²**: 0.969
+- **Test R²**: 0.920
 
 The model achieves excellent predictive accuracy with sub-second error rates, indicating strong ability to capture tire degradation patterns.
 
@@ -66,7 +67,7 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 
 **Key Insights:**
 - Track temperature and fuel load are the dominant factors affecting lap times
-- Car tier accounts for ~9% of performance variation between teams
+- Car tier accounts for ~11% of performance variation between teams
 - Tire compound and age have smaller but significant impacts
 
 ### Fuel Load Effects
@@ -89,8 +90,14 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 ### Tire Degradation by Car Tier
 ![Tire Degradation Curves](plots/Silverstone/tire_degradation_curves.png)
 
+**Multi-Dimensional Analysis:**
+- **Rows**: 80%, 50%, 20% fuel loads
+- **Columns**: Tier 1, Tier 2, Tier 3 teams
+- **Shading**: Highlights fastest compound at each tire age
+- **Cliff Effects**: Synthetic data ensures realistic degradation beyond lap 25
+
 **Team Performance Differences:**
-- **Tier 1 teams** (Red Bull, Ferrari, Mercedes): ~1.5s faster baseline performance
+- **Tier 1 teams**: Red Bull, Ferrari, Mercedes: Contenders with faster baseline performance
 - **Tier 2 teams** (McLaren, Alpine, etc.): Midfield performance reference
 - **Tier 3 teams** (Williams, Haas, etc.): Show more pronounced tire degradation
 
@@ -104,7 +111,7 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 
 ### Preprocessing Pipeline
 1. **Data Filtering**: Remove outlier laps (pit stops, safety cars, invalid times)
-2. **Statistical Outlier Removal**: Filter laps beyond 2.5 standard deviations
+2. **Synthetic Data Generation**: Add cliff effects where real data < 5 samples (long stints)
 3. **Fuel Load Calculation**: Circuit-specific fuel burn rates and race progression modeling
 4. **Car Tier Assignment**: Based on constructor championship standings
 5. **Feature Engineering**: Encode categorical variables and normalize ranges
@@ -112,9 +119,10 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 ## Model Architecture
 
 - **Algorithm**: XGBoost with monotonic constraints
-- **Features**: Tire compound, tire age, track temperature, fuel load, car tier
+- **Features**: Tire compound, tire age², track temperature, fuel load, car tier
 - **Constraints**: Ensures tire age and fuel load correctly correlate with lap times
-- **Validation**: Train/test split with early stopping to prevent overfitting
+- **Synthetic Integration**: Real and synthetic data mixed in both training and test sets
+- **Validation**: Train/test split with 80/20 random shuffle, early stopping
 
 ## Author
 
@@ -122,4 +130,4 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 
 ---
 
-*Machine learning model for F1 tire degradation and lap time prediction*
+*Machine learning model for F1 tire degradation and lap time prediction.*

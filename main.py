@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore')
 
 # Import modules
 from tire_model import F1TireModel
-from data_collection import collect_data
+from data_collection import collect_data, preprocess_data
 from plotting import plot_feature_importance, plot_degradation_curves, plot_fuel_load_effect, plot_race_stint_simulation
 
 # Create cache directory
@@ -19,39 +19,12 @@ if not os.path.exists(cache_dir):
 # Enable Fast-F1 cache
 fastf1.Cache.enable_cache(cache_dir)
 
-def preprocess_data(df):
-    """
-    Basic preprocessing for the model
-    """
-    print(f"Data before preprocessing: {len(df)} laps")
-    
-    # Remove basic outliers (very conservative)
-    def remove_outliers(group):
-        mean_time = group['lap_time'].mean()
-        std_time = group['lap_time'].std()
-        # Keep data within 3 standard deviations (very conservative)
-        mask = np.abs(group['lap_time'] - mean_time) <= 3 * std_time
-        return group[mask]
-    
-    # Group by compound and tire age for outlier removal
-    df = df.groupby(['compound', 'tire_age']).apply(remove_outliers).reset_index(drop=True)
-    
-    print(f"Data after outlier removal: {len(df)} laps")
-    print()  # Add spacing
-    
-    # Create feature matrix
-    feature_cols = ['track_temp', 'fuel_load', 'car_tier', 'compound', 'tire_age']
-    X = df[feature_cols].copy()
-    y = df['lap_time'].copy()
-    
-    return X, y, df
-
 def main():
     # Initialize model
     model = F1TireModel()
     
     # Data collection settings
-    circuit = "Spa"
+    circuit = "Silverstone"
     years = [2022, 2023]
     
     # Collect data
