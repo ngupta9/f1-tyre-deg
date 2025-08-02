@@ -1,97 +1,90 @@
 import os
 import fastf1
 import warnings
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
-# Import our modules
-from model import F1TireDegradationModel
-from data_collection import collect_data, preprocess_data
-from plotting import (plot_feature_importance, plot_race_stint_simulation, 
-                     plot_degradation_curves, plot_fuel_load_effect)
+# Import modules
+from tire_model import F1TireModel
+from data_collection import collect_data
+from plotting import plot_feature_importance, plot_degradation_curves, plot_fuel_load_effect, plot_race_stint_simulation
 
-# Create cache directory if it doesn't exist
+# Create cache directory
 cache_dir = 'cache'
 if not os.path.exists(cache_dir):
     os.makedirs(cache_dir)
 
-# Enable Fast-F1 cache for faster data loading
+# Enable Fast-F1 cache
 fastf1.Cache.enable_cache(cache_dir)
+
+def preprocess_data(df):
+    """
+    Basic preprocessing for the model
+    """
+    print(f"Data before preprocessing: {len(df)} laps")
+    
+    # Remove basic outliers (very conservative)
+    def remove_outliers(group):
+        mean_time = group['lap_time'].mean()
+        std_time = group['lap_time'].std()
+        # Keep data within 3 standard deviations (very conservative)
+        mask = np.abs(group['lap_time'] - mean_time) <= 3 * std_time
+        return group[mask]
+    
+    # Group by compound and tire age for outlier removal
+    df = df.groupby(['compound', 'tire_age']).apply(remove_outliers).reset_index(drop=True)
+    
+    print(f"Data after outlier removal: {len(df)} laps")
+    print()  # Add spacing
+    
+    # Create feature matrix
+    feature_cols = ['track_temp', 'fuel_load', 'car_tier', 'compound', 'tire_age']
+    X = df[feature_cols].copy()
+    y = df['lap_time'].copy()
+    
+    return X, y, df
 
 def main():
     # Initialize model
-    model = F1TireDegradationModel()
+    model = F1TireModel()
     
-    # Define circuit and years once
-    circuit = "Silverstone"  # Example circuit
-    years = [2022, 2023]  # Recent years
+    # Data collection settings
+    circuit = "Spa"
+    years = [2022, 2023]
     
-    # Collect data (this might take a while the first time)
-    print("Starting data collection...")
+    # Collect data
+    print(f"Collecting data for {circuit} ({years})...")
     df = collect_data(years, circuit)
-    
-    # Store circuit name in model for plotting functions
-    model.circuit_name = circuit
     
     if len(df) > 0:
         # Preprocess data
-        print("\nPreprocessing data...")
-        X, y, processed_df = preprocess_data(df, model.compound_encoder)
+        X, y, processed_df = preprocess_data(df)
+        
+        # Train model
+        X_train, X_test, y_train, y_test, y_pred_train, y_pred_test = model.train_model(X, y)
         
         # Calculate mid-range temperature from actual data
         temp_min = processed_df['track_temp'].min()
         temp_max = processed_df['track_temp'].max()
         mid_temp = int((temp_min + temp_max) / 2)
-        print(f"\nUsing mid-range temperature: {mid_temp}°C (range: {temp_min:.1f}°C to {temp_max:.1f}°C)")
+        print(f"Using mid-range temperature: {mid_temp}°C (range: {temp_min:.1f}°C to {temp_max:.1f}°C)")
         
-        # Train model
-        print("\nTraining XGBoost model...")
-        X_train, X_test, y_train, y_test, y_pred_train, y_pred_test = model.train_model(X, y)
-        
-        # Show feature importance
-        print("\nShowing feature importance...")
+        # Generate plots
+        print()
+        print("Generating plots...")
         plot_feature_importance(model.model, model.feature_names, circuit_name=circuit)
+        plot_degradation_curves(model, model.compound_encoder, circuit_name=circuit, track_temp=mid_temp)
+        plot_fuel_load_effect(model, model.compound_encoder, circuit_name=circuit, track_temp=mid_temp)
+        plot_race_stint_simulation(model, model.compound_encoder, circuit_name=circuit, track_temp=mid_temp)
         
-        # Show degradation curves for all tiers
-        print("\nShowing degradation curves...")
-        plot_degradation_curves(model.model, model.compound_encoder, circuit_name=circuit, 
-                               track_temp=mid_temp, fuel_load=50)
-        
-        # Show fuel load effect comparison
-        print("\nShowing fuel load effects...")
-        plot_fuel_load_effect(model.model, model.compound_encoder, circuit_name=circuit,
-                             track_temp=mid_temp, car_tier=1)  # Tier 2 (midfield) team
-        
-        # Show realistic race stint simulation
-        print("\nShowing race stint simulation...")
-        plot_race_stint_simulation(model.model, model.compound_encoder, circuit, 
-                                 track_temp=mid_temp, car_tier=1, stint_length=25)
-
-        # Example predictions for different tiers
-        print("\nExample predictions:")
-        available_compounds = list(model.compound_encoder.classes_)
-        
-        if 'SOFT' in available_compounds:
-            print(f"Soft tire, 10 laps, {mid_temp}°C, 70% fuel:")
-            print(f"  Tier 1 team: {model.predict_lap_time('SOFT', 10, mid_temp, 70, 0):.2f}s")
-            print(f"  Tier 2 team: {model.predict_lap_time('SOFT', 10, mid_temp, 70, 1):.2f}s")
-            print(f"  Tier 3 team: {model.predict_lap_time('SOFT', 10, mid_temp, 70, 2):.2f}s")
-        
-        if 'MEDIUM' in available_compounds:
-            print(f"Medium tire, 15 laps, {mid_temp+2}°C, 40% fuel:")
-            print(f"  Tier 1 team: {model.predict_lap_time('MEDIUM', 15, mid_temp+2, 40, 0):.2f}s")
-            print(f"  Tier 2 team: {model.predict_lap_time('MEDIUM', 15, mid_temp+2, 40, 1):.2f}s")
-            print(f"  Tier 3 team: {model.predict_lap_time('MEDIUM', 15, mid_temp+2, 40, 2):.2f}s")
-        
-        if 'HARD' in available_compounds:
-            print(f"Hard tire, 20 laps, {mid_temp-1}°C, 30% fuel:")
-            print(f"  Tier 1 team: {model.predict_lap_time('HARD', 20, mid_temp-1, 30, 0):.2f}s")
-            print(f"  Tier 2 team: {model.predict_lap_time('HARD', 20, mid_temp-1, 30, 1):.2f}s")
-            print(f"  Tier 3 team: {model.predict_lap_time('HARD', 20, mid_temp-1, 30, 2):.2f}s")
-        
-        print(f"\nAll plots have been saved to the 'plots/{circuit.replace(' ', '_')}' directory!")
+        # Keep plots open
+        input("Press Enter to close all plots and exit...")
+        plt.close('all')
 
     else:
-        print("No data collected. Check your internet connection and try again.")
+        print("❌ No data collected. Check internet connection.")
 
 if __name__ == "__main__":
     main()

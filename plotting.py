@@ -7,9 +7,9 @@ def create_plots_directory(circuit_name):
     """
     Create directory structure for saving plots
     """
-    # Clean circuit name for folder (remove special characters)
-    clean_circuit_name = circuit_name.replace(" ", "_").replace("ã", "a").replace("ç", "c")
-    plots_dir = f"plots/{clean_circuit_name}"
+    # Circuit name for folder (remove special characters)
+    circuit_name = circuit_name.replace(" ", "_").replace("ã", "a").replace("ç", "c")
+    plots_dir = f"plots/{circuit_name}"
     
     # Create directory if it doesn't exist
     os.makedirs(plots_dir, exist_ok=True)
@@ -24,7 +24,7 @@ def plot_feature_importance(model, feature_names, circuit_name=None, save_plots=
         print("Model not trained yet!")
         return
         
-    importance = model.feature_importances_
+    importance = model.feature_importances_ * 100  # Convert to percentages
     
     plt.figure(figsize=(12, 8))
     indices = np.argsort(importance)[::-1]
@@ -34,7 +34,7 @@ def plot_feature_importance(model, feature_names, circuit_name=None, save_plots=
     plt.bar(range(top_n), importance[indices[:top_n]])
     plt.xticks(range(top_n), [feature_names[i] for i in indices[:top_n]], rotation=45)
     plt.title('Feature Importance in Tire Degradation Model')
-    plt.ylabel('Importance Score')
+    plt.ylabel('Importance Score (%)')
     plt.tight_layout()
     
     # Save plot if requested
@@ -43,18 +43,80 @@ def plot_feature_importance(model, feature_names, circuit_name=None, save_plots=
         plt.savefig(f"{plots_dir}/feature_importance.png", dpi=300, bbox_inches='tight')
         print(f"Saved feature importance plot to {plots_dir}/feature_importance.png")
     
-    plt.show()
-
-def plot_race_stint_simulation(model, compound_encoder, circuit_name, track_temp=30, car_tier=1, stint_length=25, save_plots=True):
+def plot_fuel_load_effect(model_instance, compound_encoder, circuit_name=None, track_temp=30, car_tier=1, save_plots=True):
+    """
+    Plot the effect of fuel load on lap times for each tire compound
+    """
+    if model_instance is None or model_instance.model is None:
+        print("Model not trained yet!")
+        return
+        
+    tire_age = 10  # Fixed tire age for comparison
+    fuel_loads = [20, 50, 80]  # Light, Medium, Heavy fuel
+    fuel_labels = ['Light Fuel (20%)', 'Medium Fuel (50%)', 'Heavy Fuel (80%)']
+    
+    # Use only the compounds that were actually in the training data
+    available_compounds = list(compound_encoder.classes_)
+    
+    # Define F1-style colors
+    compound_colors = {
+        'SOFT': 'red',
+        'MEDIUM': 'gold', 
+        'HARD': 'lightgray'
+    }
+    
+    # Create subplot
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    
+    # For each compound, show bars for different fuel loads
+    x_positions = np.arange(len(available_compounds))
+    bar_width = 0.25
+    
+    for i, fuel_load in enumerate(fuel_loads):
+        lap_times = []
+        
+        for compound in available_compounds:
+            # Use the model's predict_lap_time method
+            lap_time = model_instance.predict_lap_time(compound, tire_age, track_temp, fuel_load, car_tier)
+            lap_times.append(lap_time)
+        
+        # Plot bars for this fuel load
+        bars = ax.bar(x_positions + i * bar_width, lap_times, 
+                     bar_width, label=fuel_labels[i], alpha=0.8)
+        
+        # Add value labels on bars
+        for bar, lap_time in zip(bars, lap_times):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                   f'{lap_time:.2f}s', ha='center', va='bottom', fontsize=10)
+    
+    # Customize plot
+    ax.set_xlabel('Tire Compound')
+    ax.set_ylabel('Predicted Lap Time (seconds)')
+    ax.set_title(f'Fuel Load Effect on Lap Times\n(Tire Age: {tire_age} laps, Track Temp: {track_temp}°C, Car Tier: {car_tier+1})')
+    ax.set_xticks(x_positions + bar_width)
+    ax.set_xticklabels(available_compounds)
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    
+    # Save plot if requested
+    if save_plots and circuit_name:
+        plots_dir = create_plots_directory(circuit_name)
+        plt.savefig(f"{plots_dir}/fuel_load_effect.png", dpi=300, bbox_inches='tight')
+        print(f"Saved fuel load effect plot to {plots_dir}/fuel_load_effect.png")
+    
+def plot_race_stint_simulation(model_instance, compound_encoder, circuit_name, track_temp=30, car_tier=1, stint_length=25, save_plots=True):
     """
     Plot realistic race stint showing both tire degradation and fuel burn-off effects
     """
-    if model is None:
+    if model_instance is None or model_instance.model is None:
         print("Model not trained yet!")
         return
         
     if circuit_name is None:
-        print("No circuit data available. Run collect_data() first.")
+        print("No circuit data available.")
         return
         
     # Use only the compounds that were actually in the training data
@@ -92,17 +154,11 @@ def plot_race_stint_simulation(model, compound_encoder, circuit_name, track_temp
             # Tire age increases linearly
             tire_age = stint_lap
             
-            # Fuel decreases linearly during stint (circuit-specific burn rate)
+            # Fuel decreases linearly during stint
             fuel_load = fuel_start_pct - ((fuel_start_pct - fuel_end_pct) * (stint_lap - 1) / (stint_length - 1))
             
-            # Create features (simplified)
-            compound_encoded = compound_encoder.transform([compound])[0]
-            
-            X_pred = np.array([[
-                compound_encoded, tire_age, track_temp, fuel_load, car_tier
-            ]])
-            
-            lap_time = model.predict(X_pred)[0]
+            # Use model's predict_lap_time method
+            lap_time = model_instance.predict_lap_time(compound, tire_age, track_temp, fuel_load, car_tier)
             
             tire_ages.append(tire_age)
             fuel_loads.append(fuel_load)
@@ -126,11 +182,17 @@ def plot_race_stint_simulation(model, compound_encoder, circuit_name, track_temp
     ax2.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
     
-    # Add annotations for key points
-    ax.annotate('Stint Start\n(Heavy Fuel)', xy=(2, max(lap_times[:3])), xytext=(4, max(lap_times) + 0.1),
-               arrowprops=dict(arrowstyle='->', color='black', alpha=0.7), fontsize=10)
-    ax.annotate('Stint End\n(Light Fuel)', xy=(stint_length-1, min(lap_times[-3:])), xytext=(stint_length-5, min(lap_times) - 0.1),
-               arrowprops=dict(arrowstyle='->', color='black', alpha=0.7), fontsize=10)
+    # Add annotations for key points (positioned within graph)
+    if len(lap_times) > 5:
+        y_range = max(lap_times) - min(lap_times)
+        y_mid = min(lap_times) + y_range * 0.7  # 70% up from bottom
+        
+        ax.annotate('Stint Start\n(Heavy Fuel)', xy=(2, lap_times[1]), xytext=(4, y_mid),
+                   arrowprops=dict(arrowstyle='->', color='black', alpha=0.7), fontsize=10,
+                   bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        ax.annotate('Stint End\n(Light Fuel)', xy=(stint_length-1, lap_times[-2]), xytext=(stint_length-5, y_mid - y_range*0.2),
+                   arrowprops=dict(arrowstyle='->', color='black', alpha=0.7), fontsize=10,
+                   bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
     
     plt.tight_layout()
     
@@ -140,17 +202,17 @@ def plot_race_stint_simulation(model, compound_encoder, circuit_name, track_temp
         plt.savefig(f"{plots_dir}/race_stint_simulation.png", dpi=300, bbox_inches='tight')
         print(f"Saved stint simulation plot to {plots_dir}/race_stint_simulation.png")
     
-    plt.show()
+    plt.show(block=False)  # Non-blocking show
 
-def plot_degradation_curves(model, compound_encoder, circuit_name=None, track_temp=30, fuel_load=50, save_plots=True):
+def plot_degradation_curves(model_instance, compound_encoder, circuit_name=None, track_temp=30, save_plots=True):
     """
-    Plot tire degradation curves for each compound and car tier
+    Plot tire degradation curves for each compound across car tiers and fuel loads (3x3 grid)
     """
-    if model is None:
+    if model_instance is None or model_instance.model is None:
         print("Model not trained yet!")
         return
         
-    tire_ages = np.arange(1, 31)  # 1 to 30 laps (realistic race stint length)
+    tire_ages = np.arange(1, 51)  # 1 to 50 laps to capture HARD tire cliff effects
     
     # Use only the compounds that were actually in the training data
     available_compounds = list(compound_encoder.classes_)
@@ -163,35 +225,77 @@ def plot_degradation_curves(model, compound_encoder, circuit_name=None, track_te
         'HARD': 'lightgray'
     }
     
-    # Create subplots for each car tier with shared y-axis
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
+    # Shading colors (lighter versions)
+    shading_colors = {
+        'SOFT': 'red',
+        'MEDIUM': 'orange', 
+        'HARD': 'lightblue'
+    }
+    
+    # Define fuel loads and car tiers
+    fuel_loads = [80, 50, 20]  # Heavy, Medium, Light fuel
+    fuel_labels = ['80% Fuel (Heavy)', '50% Fuel (Medium)', '20% Fuel (Light)']
     tier_names = ['Tier 1 (Top Teams)', 'Tier 2 (Midfield)', 'Tier 3 (Bottom Teams)']
     
-    for tier in range(3):
-        ax = axes[tier]
-        
-        for compound in available_compounds:
-            lap_times = []
-            for age in tire_ages:
-                # Create features with specific car tier (simplified)
-                compound_encoded = compound_encoder.transform([compound])[0]
-                
-                X_pred = np.array([[
-                    compound_encoded, age, track_temp, fuel_load, tier
-                ]])
-                
-                lap_time = model.predict(X_pred)[0]
-                lap_times.append(lap_time)
+    # Create 3x3 subplots
+    fig, axes = plt.subplots(3, 3, figsize=(24, 18), sharey=True)
+    
+    for fuel_idx, (fuel_load, fuel_label) in enumerate(zip(fuel_loads, fuel_labels)):
+        for tier in range(3):
+            ax = axes[fuel_idx, tier]
             
-            color = compound_colors.get(compound, 'blue')
-            ax.plot(tire_ages, lap_times, label=f'{compound} Compound', 
-                   linewidth=2, color=color)
-        
-        ax.set_xlabel('Tire Age (Laps)')
-        ax.set_ylabel('Predicted Lap Time (seconds)')
-        ax.set_title(f'{tier_names[tier]}\n(Track Temp: {track_temp}°C, Fuel Load: {fuel_load}%)')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+            # Calculate lap times for all compounds at all ages
+            compound_data = {}
+            for compound in available_compounds:
+                lap_times = []
+                for age in tire_ages:
+                    lap_time = model_instance.predict_lap_time(compound, age, track_temp, fuel_load, tier)
+                    lap_times.append(lap_time)
+                compound_data[compound] = lap_times
+            
+            # Find fastest compound at each age for shading
+            fastest_compound = []
+            for i, age in enumerate(tire_ages):
+                times_at_age = {comp: times[i] for comp, times in compound_data.items()}
+                fastest = min(times_at_age, key=times_at_age.get)
+                fastest_compound.append(fastest)
+            
+            # Add shading for fastest compound sections
+            current_fastest = fastest_compound[0]
+            section_start = tire_ages[0]
+            
+            for i, age in enumerate(tire_ages[1:], 1):
+                if fastest_compound[i] != current_fastest or i == len(tire_ages) - 1:
+                    # End of current section, add shading
+                    section_end = tire_ages[i] if i == len(tire_ages) - 1 else tire_ages[i-1]
+                    color = shading_colors.get(current_fastest, 'gray')
+                    ax.axvspan(section_start, section_end, alpha=0.2, color=color, zorder=0)
+                    
+                    # Start new section
+                    current_fastest = fastest_compound[i]
+                    section_start = tire_ages[i-1] if i < len(tire_ages) else tire_ages[i]
+            
+            # Plot the curves
+            for compound in available_compounds:
+                color = compound_colors.get(compound, 'blue')
+                ax.plot(tire_ages, compound_data[compound], label=f'{compound}', 
+                       linewidth=2, color=color)
+            
+            ax.set_xlabel('Tire Age (Laps)')
+            if tier == 0:  # Only leftmost column gets y-label
+                ax.set_ylabel('Predicted Lap Time (seconds)')
+            
+            # Title shows both fuel and tier info
+            ax.set_title(f'{tier_names[tier]}\n{fuel_label}\n(Track Temp: {track_temp}°C)')
+            
+            # Only show legend on the top-left subplot
+            if fuel_idx == 0 and tier == 0:
+                ax.legend()
+            
+            ax.grid(True, alpha=0.3)
+    
+    # Overall title
+    fig.suptitle('Tire Degradation Across Fuel Loads and Car Tiers', fontsize=16, y=0.98)
     
     plt.tight_layout()
     
@@ -201,76 +305,4 @@ def plot_degradation_curves(model, compound_encoder, circuit_name=None, track_te
         plt.savefig(f"{plots_dir}/tire_degradation_curves.png", dpi=300, bbox_inches='tight')
         print(f"Saved degradation curves plot to {plots_dir}/tire_degradation_curves.png")
     
-    plt.show()
-
-def plot_fuel_load_effect(model, compound_encoder, circuit_name=None, track_temp=30, car_tier=1, save_plots=True):
-    """
-    Plot the effect of fuel load on lap times for each tire compound
-    """
-    if model is None:
-        print("Model not trained yet!")
-        return
-        
-    tire_age = 10  # Fixed tire age for comparison
-    fuel_loads = [20, 50, 80]  # Light, Medium, Heavy fuel
-    fuel_labels = ['Light Fuel (20%)', 'Medium Fuel (50%)', 'Heavy Fuel (80%)']
-    
-    # Use only the compounds that were actually in the training data
-    available_compounds = list(compound_encoder.classes_)
-    
-    # Define F1-style colors
-    compound_colors = {
-        'SOFT': 'red',
-        'MEDIUM': 'gold', 
-        'HARD': 'lightgray'
-    }
-    
-    # Create subplot
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    
-    # For each compound, show bars for different fuel loads
-    x_positions = np.arange(len(available_compounds))
-    bar_width = 0.25
-    
-    for i, fuel_load in enumerate(fuel_loads):
-        lap_times = []
-        
-        for compound in available_compounds:
-            # Create features (simplified)
-            compound_encoded = compound_encoder.transform([compound])[0]
-            
-            X_pred = np.array([[
-                compound_encoded, tire_age, track_temp, fuel_load, car_tier
-            ]])
-            
-            lap_time = model.predict(X_pred)[0]
-            lap_times.append(lap_time)
-        
-        # Plot bars for this fuel load
-        bars = ax.bar(x_positions + i * bar_width, lap_times, 
-                     bar_width, label=fuel_labels[i], alpha=0.8)
-        
-        # Add value labels on bars
-        for bar, lap_time in zip(bars, lap_times):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                   f'{lap_time:.2f}s', ha='center', va='bottom', fontsize=10)
-    
-    # Customize plot
-    ax.set_xlabel('Tire Compound')
-    ax.set_ylabel('Predicted Lap Time (seconds)')
-    ax.set_title(f'Fuel Load Effect on Lap Times\n(Tire Age: {tire_age} laps, Track Temp: {track_temp}°C, Car Tier: {car_tier+1})')
-    ax.set_xticks(x_positions + bar_width)
-    ax.set_xticklabels(available_compounds)
-    ax.legend()
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    
-    # Save plot if requested
-    if save_plots and circuit_name:
-        plots_dir = create_plots_directory(circuit_name)
-        plt.savefig(f"{plots_dir}/fuel_load_effect.png", dpi=300, bbox_inches='tight')
-        print(f"Saved fuel load effect plot to {plots_dir}/fuel_load_effect.png")
-    
-    plt.show()
+    plt.show(block=False)  # Non-blocking show
