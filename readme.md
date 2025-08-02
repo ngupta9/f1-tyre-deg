@@ -32,7 +32,7 @@ conda env create -f environment.yml
 conda activate f1-tire-model
 
 # Or install via pip
-pip install fastf1 pandas numpy xgboost scikit-learn matplotlib seaborn
+pip install fastf1 pandas numpy xgboost scikit-learn matplotlib
 ```
 
 ### 2. Run Analysis
