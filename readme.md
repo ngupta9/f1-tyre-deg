@@ -17,7 +17,7 @@ A machine learning model that predicts F1 lap times based on tire degradation, f
 | File | Purpose |
 |------|---------|
 | `main.py` | Main execution script - configure circuit and years here |
-| `model.py` | XGBoost model with 5-feature architecture and synthetic data generation |
+| `tire_model.py` | XGBoost model with 5-feature architecture and synthetic data generation |
 | `data_collection.py` | F1 data gathering, circuit info, and preprocessing functions |
 | `plotting.py` | All visualization functions with auto-save capabilities |
 | `multi_circuit_analysis.py` | Batch analysis script for multiple circuits |
@@ -70,22 +70,12 @@ The model achieves excellent predictive accuracy with sub-second error rates, in
 - Car tier accounts for ~11% of performance variation between teams
 - Tire compound and age have smaller but significant impacts
 
-### Fuel Load Effects
-![Fuel Load Effect](plots/Silverstone/fuel_load_effect.png)
-
-**Analysis:**
-- Heavy fuel loads (80%) add ~2.8 seconds per lap compared to light fuel (20%)
-- Effect is consistent across all tire compounds
-- Demonstrates the critical importance of fuel strategy in F1
-
 ### Race Stint Simulation
 ![Race Stint Simulation](plots/Silverstone/race_stint_simulation.png)
 
 **Realistic Modeling:**
 - Shows competing effects: tire degradation (increasing lap times) vs fuel burn-off (decreasing lap times)
 - Silverstone-specific fuel consumption: 3.3 kg/lap over 25-lap stint
-- Soft tires show initial sharp degradation, then plateau as fuel effect dominates
-- Hard tires maintain more consistent performance throughout stint
 
 ### Tire Degradation by Car Tier
 ![Tire Degradation Curves](plots/Silverstone/tire_degradation_curves.png)

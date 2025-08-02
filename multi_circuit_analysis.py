@@ -11,8 +11,8 @@ warnings.filterwarnings('ignore')
 # Import our modules
 from tire_model import F1TireModel
 from data_collection import collect_data, preprocess_data
-from plotting import (plot_feature_importance, plot_race_stint_simulation, 
-                     plot_degradation_curves, plot_fuel_load_effect)
+from plotting import (plot_feature_importance, plot_race_stint_simulation, plot_degradation_curves, 
+                      plot_fuel_load_effect)
 
 # Create cache directory if it doesn't exist
 cache_dir = 'cache'
@@ -58,13 +58,10 @@ def analyze_circuit(circuit, years):
         # Generate all plots (automatically saved)
         print("Generating and saving plots...")
         plot_feature_importance(model.model, model.feature_names, circuit_name=circuit)
-        plot_degradation_curves(model, model.compound_encoder, circuit_name=circuit, 
-                               track_temp=mid_temp)
-        plot_fuel_load_effect(model, model.compound_encoder, circuit_name=circuit,
-                             track_temp=mid_temp)
-        plot_race_stint_simulation(model, model.compound_encoder, circuit, 
-                                 track_temp=mid_temp)
-        
+        plot_degradation_curves(model, model.compound_encoder, circuit_name=circuit, track_temp=mid_temp)
+        plot_fuel_load_effect(model, model.compound_encoder, circuit_name=circuit, track_temp=mid_temp)
+        plot_race_stint_simulation(model, model.compound_encoder, circuit, track_temp=mid_temp)
+
         print(f"✅ Analysis complete for {circuit}!")
         return True
     else:

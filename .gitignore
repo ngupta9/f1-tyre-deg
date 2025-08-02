@@ -3,7 +3,7 @@
 # FastF1 Cache
 cache/
 
-# Plot directories (keep only Silverstone)
+# Extra directories (keep only Silverstone plots)
 extra/
 plots/
 !plots/Silverstone/
